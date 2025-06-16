@@ -24,9 +24,9 @@
 </p>
 
 ---
-本仓库为SWE-bench的使用uv管理环境，去docker化的版本1
+本仓库为SWE-bench的使用uv管理环境，去docker化的版本1 （2025-6-20）
 
-以下为原作者：
+以下为原项目信息：
 
 Code and data for the following works:
 * [ICLR 2025] <a href="https://arxiv.org/abs/2410.03859">SWE-bench Multimodal: Do AI Systems Generalize to Visual Software Domains?</a>
