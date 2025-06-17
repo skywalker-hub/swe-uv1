@@ -120,23 +120,24 @@ def run_sequential(func, args_list):
     pbar.close()
     return succeeded, failed
 
+from modelscope.msdatasets import MsDataset
 
 def load_swebench_dataset(
     name="SWE-bench/SWE-bench", split="test", instance_ids=None
 ) -> list[SWEbenchInstance]:
     """
-    Load SWE-bench dataset from Hugging Face Datasets or local .json/.jsonl file
+    Load SWE-bench dataset from Hugging Face Datasets or ModelScope or local .json/.jsonl file
     """
-    # check that all instance IDs are in the dataset
     if instance_ids:
         instance_ids = set(instance_ids)
-    # Load from local .json/.jsonl file
+
+    # 本地加载
     if name.endswith(".json"):
         dataset = json.loads(Path(name).read_text())
     elif name.endswith(".jsonl"):
         dataset = [json.loads(line) for line in Path(name).read_text().splitlines()]
     else:
-        # Load from Hugging Face Datasets
+        # 标准化名称
         if name.lower() in {"swe-bench", "swebench", "swe_bench"}:
             name = "SWE-bench/SWE-bench"
         elif name.lower() in {
@@ -147,25 +148,42 @@ def load_swebench_dataset(
             "lite",
         }:
             name = "SWE-bench/SWE-bench_Lite"
+
+        # 尝试从本地 HuggingFace disk 加载（用于 load_dataset 保存的缓存）
         if (Path(name) / split / "dataset_info.json").exists():
             dataset = cast(Dataset, load_from_disk(Path(name) / split))
         else:
-            dataset = cast(Dataset, load_dataset(name, split=split))
+            try:
+                dataset = cast(Dataset, load_dataset(name, split=split))
+                print(f"[INFO] 成功从 Hugging Face 加载 {name}（split={split}）")
+            except Exception as e:
+                print(f"[WARN] Hugging Face 加载失败：{e}")
+                print(f"[INFO] 尝试从 ModelScope 加载 {name}（split={split}）")
+                try:
+                    from modelscope.msdatasets import MsDataset
+                    ms_dataset = MsDataset.load(name, subset_name="default", split=split)
+                    from datasets import Dataset as HFDataset
+                    dataset = HFDataset.from_list(ms_dataset.to_list())
+                    print("[INFO] 成功从 ModelScope 加载数据集。")
+                except Exception as e2:
+                    print(f"[ERROR] ModelScope 加载失败：{e2}")
+                    raise RuntimeError("无法加载数据集：Hugging Face 和 ModelScope 均失败。")
+
+    # 筛选特定 instance_id
     dataset_ids = {instance[KEY_INSTANCE_ID] for instance in dataset}
     if instance_ids:
         if instance_ids - dataset_ids:
             raise ValueError(
-                (
-                    "Some instance IDs not found in dataset!"
-                    f"\nMissing IDs:\n{' '.join(instance_ids - dataset_ids)}"
-                )
+                f"以下 instance_id 在数据集中未找到:\n{instance_ids - dataset_ids}"
             )
         dataset = [
             instance
             for instance in dataset
             if instance[KEY_INSTANCE_ID] in instance_ids
         ]
+
     return [cast(SWEbenchInstance, instance) for instance in dataset]
+
 
 
 ### MARK - Patch Correction
