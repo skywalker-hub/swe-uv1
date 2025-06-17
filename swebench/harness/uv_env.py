@@ -24,15 +24,15 @@ def create_env(scripts: list[str], env_key: str | None = None) -> Path:
     if not env_path.exists():
         env_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # ✅ 明确指定使用 Python 3.10
+        # 明确指定使用 Python 3.10
         python_bin = shutil.which("python3.10")
         if not python_bin:
-            raise RuntimeError("❌ 找不到 python3.10，请先安装后再运行 SWE-bench。")
+            raise RuntimeError("找不到 python3.10,请先安装后再运行 SWE-bench。")
 
         subprocess.run(["uv", "venv", "--python", python_bin, str(env_path)], check=True)
 
         for cmd in scripts:
-            # ✅ 用 VIRTUAL_ENV + PATH 注入方式替代 source
+            # 用 VIRTUAL_ENV + PATH 注入方式替代 source
             env = {
                 **os.environ,
                 "VIRTUAL_ENV": str(env_path),
