@@ -37,6 +37,7 @@ class EvaluationError(Exception):
         )
 
 
+#####加载预测
 def get_predictions_from_file(predictions_path: str, dataset_name: str, split: str):
     if predictions_path == "gold":
         print("Using gold predictions - ignoring predictions_path")
