@@ -943,6 +943,7 @@ MAP_REPO_TO_REQS_PATHS = {
     "pyvista/pyvista": ["requirements_test.txt", "requirements.txt"],
     "sqlfluff/sqlfluff": ["requirements_dev.txt"],
     "sympy/sympy": ["requirements-dev.txt", "requirements-test.txt"],
+    "sphinx-doc/sphinx": ["requirements-dev.txt", "requirements-test.txt"],
 }
 
 
