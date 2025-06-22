@@ -36,8 +36,9 @@ class EvaluationError(Exception):
             f"Check ({self.log_file}) for more information."
         )
 
-
+################
 def get_predictions_from_file(predictions_path: str, dataset_name: str, split: str):
+
     if predictions_path == "gold":
         print("Using gold predictions - ignoring predictions_path")
         dataset = load_swebench_dataset(dataset_name, split)
@@ -49,6 +50,7 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
             }
             for datum in dataset
         ]
+    
     if predictions_path.endswith(".json"):
         with open(predictions_path, "r") as f:
             predictions = json.load(f)
@@ -60,11 +62,13 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
                 raise ValueError(
                     "Predictions must be a list[prediction] or a dictionary[instance_id: prediction]"
                 )
+            
     elif predictions_path.endswith(".jsonl"):
         with open(predictions_path, "r") as f:
             predictions = [json.loads(line) for line in f]
+
     else:
-        raise ValueError("Predictions path must be .json or .jsonl")
+        raise ValueError("Predictions path must be .json or .jsonl") 
 
     # Validate that each prediction has an instance_id
     for pred in predictions:
@@ -76,6 +80,8 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
     return predictions
 
 
+
+##############
 def run_threadpool(func, payloads, max_workers):
     if max_workers <= 0:
         return run_sequential(func, payloads)
@@ -102,6 +108,7 @@ def run_threadpool(func, payloads, max_workers):
     return succeeded, failed
 
 
+#################
 def run_sequential(func, args_list):
     """
     Run a function with a list of arguments sequentially
@@ -121,6 +128,7 @@ def run_sequential(func, args_list):
     return succeeded, failed
 
 
+##################
 def load_swebench_dataset(
     name="SWE-bench/SWE-bench", split="test", instance_ids=None
 ) -> list[SWEbenchInstance]:
