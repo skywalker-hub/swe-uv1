@@ -303,33 +303,53 @@ def make_repo_script_list_py(
 
 def make_env_script_list_py(instance, specs, env_name) -> list:
     """Return commands to install dependencies using uv."""
+    # 定义一个唯一的字符串作为"Here Document"的分隔符，以避免与文件内容冲突。
     HEREDOC_DELIMITER = "EOF_59812759871"
     cmds = []
+    
+    # 从配置（specs）中获取包安装策略（"requirements.txt", "environment.yml", 或直接是包名）。
     pkgs = specs.get("packages", "")
+
+    # 情况一：如果策略是 "requirements.txt"
     if pkgs == "requirements.txt":
+        # 1. 调用辅助函数，在内存中获取处理和清理过的 requirements.txt 内容。
         reqs = get_requirements(instance)
         path_to_reqs = "requirements.txt"
+        # 2. 使用 "Here Document" (cat <<'EOF'...) 技巧，将内存中的内容动态写入到容器中的同名文件。
         cmds.append(
             f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
         )
+        # 3. 使用 uv（一个快速的包安装器）从刚刚创建的文件中安装依赖。
         cmds.append(f"uv pip install -r {path_to_reqs}")
+        # 4. 安装完成后，删除临时的 requirements.txt 文件，保持环境整洁。
         cmds.append(f"rm {path_to_reqs}")
+    
+    # 情况二：如果策略是 "environment.yml"，逻辑与 requirements.txt 类似。
     elif pkgs == "environment.yml":
+        # 1. 获取 environment.yml 的内容。
         reqs = get_environment_yml(instance, env_name)
         path_to_reqs = "environment.yml"
+        # 2. 动态写入文件。
         cmds.append(
             f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
         )
+        # 3. 从文件安装依赖。
         cmds.append(f"uv pip install -r {path_to_reqs}")
+        # 4. 删除临时文件。
         cmds.append(f"rm {path_to_reqs}")
+
+    # 情况三：如果策略是直接提供包名字符串（例如 "numpy pandas"）。
     elif pkgs:
+        # 直接生成 `uv pip install` 命令来安装这些包。
         cmds.append(f"uv pip install {pkgs}")
 
+    # 检查是否还有额外的包需要安装（通常用于修补环境或特殊测试需求）。
     if "pip_packages" in specs:
         pip_packages = " ".join(specs["pip_packages"])
         cmds.append(f"uv pip install {pip_packages}")
+        
+    # 返回构建好的所有命令组成的列表。
     return cmds
-
 
 
 def make_eval_script_list_py(
