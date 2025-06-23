@@ -260,6 +260,14 @@ def get_test_directives(instance: SWEbenchInstance) -> list:
     return directives
 
 
+
+
+# ======================================================================================
+#                     生成 Python 项目的代码仓库设置脚本
+#
+# 该函数负责创建一系列的 shell 命令，用于完整地、可复现地建立一个待测试的
+# Python 代码仓库环境。它包括了从克隆、版本重置到执行特定安装指令的全过程。
+# ======================================================================================
 def make_repo_script_list_py(
     specs, repo, repo_directory, base_commit, env_name
 ) -> list:
@@ -267,40 +275,62 @@ def make_repo_script_list_py(
     Create a list of bash commands to set up the repository for testing.
     This is the setup script for the instance image.
     """
+    # 定义基础的仓库设置命令列表。
     setup_commands = [
+        # 1. 从 GitHub 克隆指定的代码仓库。
         f"git clone -o origin https://github.com/{repo} {repo_directory}",
-        f"chmod -R 777 {repo_directory}",  # So nonroot user can run tests
+        # 2. 修改权限，以确保非 root 用户也能在容器内执行操作。
+        f"chmod -R 777 {repo_directory}",
+        # 3. 进入仓库目录。
         f"cd {repo_directory}",
+        # 4. 将代码重置到指定的 `base_commit`，确保每次测试的起点都完全一致。
         f"git reset --hard {base_commit}",
-        # Remove the remote so the agent won't see newer commits.
+        # 5. 移除远程源，以防止后续操作与远程仓库发生意外交互，增强环境的隔离性。
         "git remote remove origin",
     ]
+    
+    # 如果常量映射中存在针对该仓库的特定安装命令，则添加它。
     if repo in MAP_REPO_TO_INSTALL:
         setup_commands.append(MAP_REPO_TO_INSTALL[repo])
 
-    # Run pre-install set up if provided
+    # 如果测试规范（specs）中定义了“预安装”指令，则将其添加到命令列表。
     if "pre_install" in specs:
         for pre_install in specs["pre_install"]:
             setup_commands.append(pre_install)
 
+    # 添加规范中定义的主要安装指令。
     if "install" in specs:
         setup_commands.append(specs["install"])
 
-    # If the setup modifies the repository in any way, it can be
-    # difficult to get a clean diff.  This ensures that `git diff`
-    # will only reflect the changes from the user while retaining the
-    # original state of the repository plus setup commands.
+    # 这是一个非常巧妙的“干净 diff”技巧。
+    # 背景：前面的安装和设置步骤可能会修改仓库中的文件（例如，生成配置文件）。
+    # 目的：为了在后续评估模型补丁时，`git diff` 只显示模型自身的改动，而不是这些设置步骤引入的“噪音”。
+    # 方法：在所有设置操作完成后，创建一个空的 commit。这将建立一个新的、干净的基线。
+    #      后续应用模型补丁后，与这个新基线进行比较，就能得到纯净的、仅由模型产生的 diff。
     clean_diff_commands = [
         "git config --global user.email setup@swebench.config",
         "git config --global user.name SWE-bench",
         "git commit --allow-empty -am SWE-bench",
     ]
 
+    # 将 "干净 diff" 的相关命令追加到总的命令列表中。
     setup_commands += clean_diff_commands
 
+    # 返回最终构建好的所有设置命令。
     return setup_commands
 
 
+
+
+
+###环境构建命令
+# ======================================================================================
+#                   生成 Python 项目的环境依赖安装脚本
+#
+# 该函数负责创建一系列的 shell 命令，用于安装一个测试实例所需的所有 Python
+# 依赖。它能够智能地处理多种依赖格式（如 requirements.txt, environment.yml）
+# 并使用现代化的 `uv` 工具进行高效安装。
+# ======================================================================================
 def make_env_script_list_py(instance, specs, env_name) -> list:
     """Return commands to install dependencies using uv."""
     # 定义一个唯一的字符串作为"Here Document"的分隔符，以避免与文件内容冲突。
@@ -352,19 +382,35 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
     return cmds
 
 
+
+
+###评估命令
+# ======================================================================================
+#                     生成 Python 项目的核心评估与测试脚本
+#
+# 该函数负责创建评测流程中最核心的指令列表。它精确地编排了应用补丁、
+# 运行测试、记录日志以及事后清理的全过程，以确保评测的准确性和可复现性。
+# ======================================================================================
 def make_eval_script_list_py(
     instance, specs, env_name, repo_directory, base_commit, test_patch
 ) -> list:
     """
     Applies the test patch and runs the tests.
     """
+    # 定义一个唯一的字符串作为"Here Document"的分隔符，用于安全地将多行补丁内容传递给git命令。
     HEREDOC_DELIMITER = "EOF_114329324912"
+    # 从测试补丁中获取所有被修改的测试文件名。
     test_files = get_modified_files(test_patch)
-    # Reset test files to the state they should be in before the patch.
+    
+    # 定义一个命令，用于将测试文件恢复到`base_commit`时的状态。这确保了应用补丁前文件的清洁和一致。
     reset_tests_command = f"git checkout {base_commit} {' '.join(test_files)}"
+    
+    # 定义应用测试补丁的命令。它使用"Here Document"语法将`test_patch`变量的内容通过标准输入传递给`git apply`。
     apply_test_patch_command = (
         f"git apply -v - <<'{HEREDOC_DELIMITER}'\n{test_patch}\n{HEREDOC_DELIMITER}"
     )
+    
+    # 构造完整的测试命令。它由基础测试命令（如 'pytest'）和从补丁中提取出的具体测试目标（文件或模块）组成。
     test_command = " ".join(
         [
             MAP_REPO_VERSION_TO_SPECS[instance["repo"]][instance["version"]][
@@ -373,25 +419,43 @@ def make_eval_script_list_py(
             *get_test_directives(instance),
         ]
     )
+    
+    # 初始化评估命令列表，首先进入代码仓库目录。
     eval_commands = [f"cd {repo_directory}"]
+    
+    # 如果规范中有额外的评估前置命令，则添加它们。
     if "eval_commands" in specs:
         eval_commands += specs["eval_commands"]
+        
+    # 添加一系列用于记录和调试的git命令，它们会在日志中显示仓库在测试前的状态。
     eval_commands += [
-        f"git config --global --add safe.directory {repo_directory}",  # for nonroot user
+        f"git config --global --add safe.directory {repo_directory}",  # 确保非root用户也能执行git命令
         f"cd {repo_directory}",
-        # This is just informational, so we have a record
+        # 以下命令仅用于信息记录。
         "git status",
         "git show",
         f"git -c core.fileMode=false diff {base_commit}",
     ]
+    
+    # 如果有安装步骤，在此处也执行一次，以确保评估环境是完全配置好的。
     if "install" in specs:
         eval_commands.append(specs["install"])
+        
+    # 按顺序组合核心的评估流程命令。
     eval_commands += [
+        # 1. 重置测试文件，确保环境干净。
         reset_tests_command,
+        # 2. 应用测试补丁，这个补丁通常包含了运行测试所需的断言或修改。
         apply_test_patch_command,
+        # 3. 打印一个开始标记，这对于后续从日志中精确提取测试输出至关重要。
         f": '{START_TEST_OUTPUT}'",
+        # 4. 执行真正的测试命令。
         test_command,
+        # 5. 打印一个结束标记，标志着测试输出的结束。
         f": '{END_TEST_OUTPUT}'",
-        reset_tests_command,  # Revert tests after done, leave the repo in the same state as before
+        # 6. 测试完成后，再次重置测试文件，将仓库恢复到测试前的状态，以避免对后续步骤产生副作用。
+        reset_tests_command,
     ]
+    
+    # 返回最终构建好的所有评估命令。
     return eval_commands
