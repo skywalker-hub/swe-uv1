@@ -300,20 +300,12 @@ def make_repo_script_list_py(
 
     return setup_commands
 
-###主要修改部分
+
 def make_env_script_list_py(instance, specs, env_name) -> list:
-    """
-    构建 uv 安装依赖的指令列表：
-    1. 优先读取 specs["packages"]
-    2. 若缺失，则默认尝试使用 requirements.txt
-    3. 若为 environment.yml 则也支持
-    """
+    """Return commands to install dependencies using uv."""
     HEREDOC_DELIMITER = "EOF_59812759871"
     cmds = []
-
-    # 兜底策略：如果 specs 中没有 packages 字段，默认设为 requirements.txt
-    pkgs = specs.get("packages") or "requirements.txt"
-
+    pkgs = specs.get("packages", "")
     if pkgs == "requirements.txt":
         reqs = get_requirements(instance)
         path_to_reqs = "requirements.txt"
@@ -322,7 +314,6 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
         )
         cmds.append(f"uv pip install -r {path_to_reqs}")
         cmds.append(f"rm {path_to_reqs}")
-
     elif pkgs == "environment.yml":
         reqs = get_environment_yml(instance, env_name)
         path_to_reqs = "environment.yml"
@@ -331,16 +322,12 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
         )
         cmds.append(f"uv pip install -r {path_to_reqs}")
         cmds.append(f"rm {path_to_reqs}")
-
     elif pkgs:
-        # 例如 pkgs="numpy pandas"
         cmds.append(f"uv pip install {pkgs}")
 
-    # 额外 pip 包（一般用于补丁环境）
     if "pip_packages" in specs:
         pip_packages = " ".join(specs["pip_packages"])
         cmds.append(f"uv pip install {pip_packages}")
-
     return cmds
 
 
