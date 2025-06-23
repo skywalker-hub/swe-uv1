@@ -63,6 +63,7 @@ def close_logger(logger):
         logger.removeHandler(handler)
 
 
+###核心流程：运行实例
 def run_instance(
     test_spec: TestSpec,
     pred: dict,
@@ -92,6 +93,7 @@ def run_instance(
         with open(report_path, "w") as f:
             f.write(json.dumps(report, indent=4))
         return instance_id, report
+    
     # 结果缓存：如果报告已存在，直接读取并返回，避免重复运行
     if report_path.exists():
         return instance_id, json.loads(report_path.read_text())
@@ -103,6 +105,7 @@ def run_instance(
 
     # 创建一个隔离的虚拟环境用于测试
     env_path = create_env(test_spec.env_script_list, test_spec.env_key)
+
     # 创建一个干净的工作目录，如果已存在则先删除
     work_dir = log_dir / "work"
     if work_dir.exists():
@@ -204,6 +207,7 @@ def run_instance(
         # 确保无论成功或失败，日志记录器都会被正确关闭
         close_logger(logger)
     return
+
 
 
 
