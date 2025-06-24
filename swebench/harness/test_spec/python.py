@@ -332,53 +332,70 @@ def make_repo_script_list_py(
 # 并使用现代化的 `uv` 工具进行高效安装。
 # ======================================================================================
 def make_env_script_list_py(instance, specs, env_name) -> list:
-    """Return commands to install dependencies using uv."""
-    # 定义一个唯一的字符串作为"Here Document"的分隔符，以避免与文件内容冲突。
+    """
+    生成一个统一的、用于安装所有Python依赖的脚本命令列表。
+    它会根据依赖文件的类型，智能地选择 uv 或 conda 作为安装工具。
+    """
     HEREDOC_DELIMITER = "EOF_59812759871"
+    
+    # 镜像和信任主机参数（主要用于 uv）
+    PYPI_MIRROR = "--index-url https://pypi.tuna.tsinghua.edu.cn/simple"
+    TRUSTED_HOST = "--trusted-host pypi.tuna.tsinghua.edu.cn"
+    UV_INSTALL_ARGS = f"{PYPI_MIRROR} {TRUSTED_HOST}"
+    
+    # 从 specs 配置中获取依赖类型
+    pkgs_type = specs.get("packages", "requirements.txt")
     cmds = []
-    
-    # 从配置（specs）中获取包安装策略（"requirements.txt", "environment.yml", 或直接是包名）。
-    pkgs = specs.get("packages", "")
 
-    # 情况一：如果策略是 "requirements.txt"
-    if pkgs == "requirements.txt":
-        # 1. 调用辅助函数，在内存中获取处理和清理过的 requirements.txt 内容。
-        reqs = get_requirements(instance)
-        path_to_reqs = "requirements.txt"
-        # 2. 使用 "Here Document" (cat <<'EOF'...) 技巧，将内存中的内容动态写入到容器中的同名文件。
+    # ===================================================================
+    # START: 最终修改 - 基于依赖类型选择正确的工具
+    # ===================================================================
+
+    if pkgs_type == "environment.yml":
+        # 策略一：当依赖文件是 environment.yml 时，使用 Conda
+        print("检测到 environment.yml，切换到 Conda 策略。")
+        
+        # 1. 获取原始的、未经转换的 environment.yml 文件内容
+        yml_content = get_environment_yml(instance, env_name)
+        path_to_yml = "environment.yml"
+        
+        # 2. 使用 Heredoc 将 yml 内容写入容器内的文件
         cmds.append(
-            f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
+            f"cat <<'{HEREDOC_DELIMITER}' > {path_to_yml}\n{yml_content}\n{HEREDOC_DELIMITER}"
         )
-        # 3. 使用 uv（一个快速的包安装器）从刚刚创建的文件中安装依赖。
-        cmds.append(f"uv pip install -r {path_to_reqs}")
-        # 4. 安装完成后，删除临时的 requirements.txt 文件，保持环境整洁。
-        cmds.append(f"rm {path_to_reqs}")
-    
-    # 情况二：如果策略是 "environment.yml"，逻辑与 requirements.txt 类似。
-    elif pkgs == "environment.yml":
-        # 1. 获取 environment.yml 的内容。
-        reqs = get_environment_yml(instance, env_name)
-        path_to_reqs = "environment.yml"
-        # 2. 动态写入文件。
-        cmds.append(
-            f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
-        )
-        # 3. 从文件安装依赖。
-        cmds.append(f"uv pip install -r {path_to_reqs}")
-        # 4. 删除临时文件。
-        cmds.append(f"rm {path_to_reqs}")
+        
+        # 3. 使用 Conda 命令来更新环境。Conda 会自动处理所有C库和Python包。
+        #    `conda env update` 会将 yml 文件中的依赖项安装到当前激活的环境中。
+        #    `--prune` 选项会移除环境中存在但 yml 中没有的包，确保环境纯净。
+        cmds.append(f"conda env update --name base --file {path_to_yml} --prune")
+        
+        # 4. 清理临时文件
+        cmds.append(f"rm {path_to_yml}")
 
-    # 情况三：如果策略是直接提供包名字符串（例如 "numpy pandas"）。
-    elif pkgs:
-        # 直接生成 `uv pip install` 命令来安装这些包。
-        cmds.append(f"uv pip install {pkgs}")
+    else:
+        # 策略二：对于 requirements.txt 或直接的包名，继续使用我们优化好的 uv 流程
+        print(f"依赖类型: {pkgs_type}。使用 uv 策略。")
+        
+        # 这里的 get_dependencies_as_requirements_text 函数仍然有用
+        reqs_text = get_dependencies_as_requirements_text(instance, specs, env_name)
+        
+        if reqs_text and reqs_text.strip():
+            path_to_reqs = "requirements.txt"
+            cmds.append(
+                f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs_text}\n{HEREDOC_DELIMITER}"
+            )
+            cmds.append(f"uv pip install -r {path_to_reqs} {UV_INSTALL_ARGS}")
+            cmds.append(f"rm {path_to_reqs}")
 
-    # 检查是否还有额外的包需要安装（通常用于修补环境或特殊测试需求）。
+    # 额外的 pip 包安装，这里继续使用 uv 即可
     if "pip_packages" in specs:
         pip_packages = " ".join(specs["pip_packages"])
-        cmds.append(f"uv pip install {pip_packages}")
+        cmds.append(f"uv pip install {pip_packages} {UV_INSTALL_ARGS}")
         
-    # 返回构建好的所有命令组成的列表。
+    # ===================================================================
+    # END: 最终修改
+    # ===================================================================
+    
     return cmds
 
 
