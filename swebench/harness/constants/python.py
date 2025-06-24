@@ -949,6 +949,7 @@ MAP_REPO_TO_REQS_PATHS = {
 # Constants - Task Instance environment.yml File Paths
 MAP_REPO_TO_ENV_YML_PATHS = {
     "matplotlib/matplotlib": ["environment.yml"],
+    "pydata/xarray": ["ci/requirements/environment.yml", "environment.yml"],
 }
 
 USE_X86_PY = {
