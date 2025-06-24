@@ -943,14 +943,12 @@ MAP_REPO_TO_REQS_PATHS = {
     "pyvista/pyvista": ["requirements_test.txt", "requirements.txt"],
     "sqlfluff/sqlfluff": ["requirements_dev.txt"],
     "sympy/sympy": ["requirements-dev.txt", "requirements-test.txt"],
-    "sphinx-doc/sphinx": ["requirements-dev.txt", "requirements-test.txt"],
 }
 
 
 # Constants - Task Instance environment.yml File Paths
 MAP_REPO_TO_ENV_YML_PATHS = {
     "matplotlib/matplotlib": ["environment.yml"],
-    "pydata/xarray": ["ci/requirements/environment.yml", "environment.yml"],
 }
 
 USE_X86_PY = {
