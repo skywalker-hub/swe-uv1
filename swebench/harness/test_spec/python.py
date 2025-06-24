@@ -337,6 +337,12 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
     HEREDOC_DELIMITER = "EOF_59812759871"
     cmds = []
     
+    # --- 新增配置：定义镜像源 ---
+    # 使用清华大学的PyPI镜像源来加速下载
+    PYPI_MIRROR_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+    MIRROR_FLAG = f"--index-url {PYPI_MIRROR_URL}"
+    # --- 配置结束 ---
+
     # 从配置（specs）中获取包安装策略（"requirements.txt", "environment.yml", 或直接是包名）。
     pkgs = specs.get("packages", "")
 
@@ -349,8 +355,8 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
         cmds.append(
             f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
         )
-        # 3. 使用 uv（一个快速的包安装器）从刚刚创建的文件中安装依赖。
-        cmds.append(f"uv pip install -r {path_to_reqs}")
+        # 3. 使用 uv 从文件中安装依赖，并加入镜像源参数。
+        cmds.append(f"uv pip install {MIRROR_FLAG} -r {path_to_reqs}")
         # 4. 安装完成后，删除临时的 requirements.txt 文件，保持环境整洁。
         cmds.append(f"rm {path_to_reqs}")
     
@@ -363,20 +369,21 @@ def make_env_script_list_py(instance, specs, env_name) -> list:
         cmds.append(
             f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs}\n{HEREDOC_DELIMITER}"
         )
-        # 3. 从文件安装依赖。
-        cmds.append(f"uv pip install -r {path_to_reqs}")
+        # 3. 从文件安装依赖，并加入镜像源参数。
+        cmds.append(f"uv pip install {MIRROR_FLAG} -r {path_to_reqs}")
         # 4. 删除临时文件。
         cmds.append(f"rm {path_to_reqs}")
 
     # 情况三：如果策略是直接提供包名字符串（例如 "numpy pandas"）。
     elif pkgs:
-        # 直接生成 `uv pip install` 命令来安装这些包。
-        cmds.append(f"uv pip install {pkgs}")
+        # 直接生成 `uv pip install` 命令来安装这些包，并加入镜像源参数。
+        cmds.append(f"uv pip install {MIRROR_FLAG} {pkgs}")
 
     # 检查是否还有额外的包需要安装（通常用于修补环境或特殊测试需求）。
     if "pip_packages" in specs:
         pip_packages = " ".join(specs["pip_packages"])
-        cmds.append(f"uv pip install {pip_packages}")
+        # 安装额外包时，同样加入镜像源参数。
+        cmds.append(f"uv pip install {MIRROR_FLAG} {pip_packages}")
         
     # 返回构建好的所有命令组成的列表。
     return cmds
