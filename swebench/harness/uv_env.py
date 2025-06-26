@@ -68,18 +68,20 @@ def create_env(scripts: list[str], env_key: str | None = None) -> Path:
         print(f"[{python_version_str.upper()}] 正在使用 {python_bin_path} 创建虚拟环境于: {env_path}")
         subprocess.run(["uv", "venv", "--python", python_bin_path, str(env_path)], check=True)
 
-        # --- 新增修复：确保新环境中包含pip基础工具 ---
-        print(f"[{python_version_str.upper()}] 正在为新环境安装 pip, setuptools, wheel...")
+        print(f"[{python_version_str.upper()}] 正在为新环境安装 兼容旧版 的基础构建工具...")
         base_tools_env = {
             **os.environ,
             "VIRTUAL_ENV": str(env_path),
             "PATH": f"{env_path}/bin:{os.environ['PATH']}"
         }
+        # --- 关键改动：指定旧版的构建工具 ---
+        # 使用旧版 setuptools (<60) 来避免严格的包发现错误
+        # 使用旧版 pip (<24) 来确保对 Python 3.8 的良好兼容性
         subprocess.run(
-            "uv pip install pip setuptools wheel",
+            "uv pip install 'pip<24' 'setuptools<60' wheel",
             shell=True, check=True, executable="/bin/bash", env=base_tools_env
         )
-        # --- 修复结束 ---
+        # --- 改动结束 ---
 
         for cmd in scripts:
             dep_env = {
