@@ -67,23 +67,33 @@ def create_env(scripts: list[str], env_key: str | None = None) -> Path:
         python_bin_path, python_version_str = _decide_python_version(scripts)
         print(f"[{python_version_str.upper()}] 正在使用 {python_bin_path} 创建虚拟环境于: {env_path}")
         subprocess.run(["uv", "venv", "--python", python_bin_path, str(env_path)], check=True)
+
+        # --- 新增修复：确保新环境中包含pip基础工具 ---
+        print(f"[{python_version_str.upper()}] 正在为新环境安装 pip, setuptools, wheel...")
+        base_tools_env = {
+            **os.environ,
+            "VIRTUAL_ENV": str(env_path),
+            "PATH": f"{env_path}/bin:{os.environ['PATH']}"
+        }
+        subprocess.run(
+            "uv pip install pip setuptools wheel",
+            shell=True, check=True, executable="/bin/bash", env=base_tools_env
+        )
+        # --- 修复结束 ---
+
         for cmd in scripts:
-            env = {
+            dep_env = {
                 **os.environ,
                 "VIRTUAL_ENV": str(env_path),
                 "PATH": f"{env_path}/bin:{os.environ['PATH']}"
             }
             subprocess.run(
-                cmd, shell=True, check=True, executable="/bin/bash", env=env
+                cmd, shell=True, check=True, executable="/bin/bash", env=dep_env
             )
     else:
         print(f"[INFO] 发现缓存的环境，直接使用: {env_path}")
 
-    # --- 终极修复：在此处注入环境变量 ---
-    # 强制将新创建的环境的bin目录添加到当前运行进程的PATH变量的最前面
-    # 这样，后续所有shell命令（如 'python'）都会优先使用我们这个环境里的版本
     os.environ["PATH"] = f"{env_path}/bin:{os.environ['PATH']}"
     print(f"[INFO] 注入成功: 后续所有命令将优先使用 '{env_path}/bin' 中的工具。")
-    # --- 修复结束 ---
     
     return env_path
