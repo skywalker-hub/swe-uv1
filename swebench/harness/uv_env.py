@@ -3,7 +3,18 @@ import subprocess
 import shutil
 from pathlib import Path
 import os
+import re
+from packaging.version import parse
 
+# --- 最终配置 ---
+LEGACY_PYTHON_ENV_NAME = "py38"
+LEGACY_PYTHON_PATH = f"/root/miniconda3/envs/{LEGACY_PYTHON_ENV_NAME}/bin/python"
+MODERN_PYTHON_BIN = "python3.10"
+LEGACY_TRIGGERS = {
+    "numpy": parse("1.22.0"),
+    "scipy": parse("1.7.0"),
+}
+# --- 配置结束 ---
 
 CACHE_DIR = Path.home() / ".cache" / "swebench" / "envs"
 
@@ -15,34 +26,64 @@ def _hash_scripts(scripts: list[str]) -> str:
 def get_env_path(env_key: str) -> Path:
     return CACHE_DIR / env_key
 
+def _decide_python_version(scripts: list[str]) -> (str, str):
+    use_legacy_python = False
+    pattern = re.compile(r"([a-zA-Z0-9_.-]+)\s*([<>=!~]+)\s*([0-9\.]+)")
+    for command in scripts:
+        matches = pattern.findall(command)
+        for package, comparator, version_str in matches:
+            if package in LEGACY_TRIGGERS:
+                try:
+                    required_version = parse(version_str)
+                    threshold_version = LEGACY_TRIGGERS[package]
+                    if required_version < threshold_version:
+                        print(f"[INFO] 检测到旧版依赖: '{package}{comparator}{version_str}'")
+                        use_legacy_python = True
+                except Exception:
+                    continue
+    if use_legacy_python:
+        print(f"[INFO] 最终决定: 由于检测到旧版依赖，将使用隔离环境 '{LEGACY_PYTHON_ENV_NAME}' 中的Python。")
+        if not Path(LEGACY_PYTHON_PATH).exists():
+            raise RuntimeError(
+                f"在路径 {LEGACY_PYTHON_PATH} 找不到隔离的Python解释器。\n"
+                f"请先运行 'conda create -n {LEGACY_PYTHON_ENV_NAME} python=3.8 -y' 来创建它。"
+            )
+        return LEGACY_PYTHON_PATH, "python3.8"
+    else:
+        print(f"[INFO] 最终决定: 未检测到需要旧版Python的依赖，将使用主环境的Python ({MODERN_PYTHON_BIN})。")
+        python_bin_path = shutil.which(MODERN_PYTHON_BIN)
+        if not python_bin_path:
+            raise RuntimeError(f"在主环境中找不到默认的Python版本 {MODERN_PYTHON_BIN}。")
+        return python_bin_path, MODERN_PYTHON_BIN
+
 def create_env(scripts: list[str], env_key: str | None = None) -> Path:
-    """Create a uv-managed environment and run install scripts using Python 3.10."""
+    """根据依赖动态选择Python版本，创建uv管理的环境并运行安装脚本。"""
     if env_key is None:
         env_key = _hash_scripts(scripts)
     env_path = get_env_path(env_key)
 
     if not env_path.exists():
         env_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 明确指定使用 Python 3.10
-        python_bin = shutil.which("python3.10")
-        if not python_bin:
-            raise RuntimeError("找不到 python3.10,请先安装后再运行 SWE-bench。")
-
-        subprocess.run(["uv", "venv", "--python", python_bin, str(env_path)], check=True)
-
+        python_bin_path, python_version_str = _decide_python_version(scripts)
+        print(f"[{python_version_str.upper()}] 正在使用 {python_bin_path} 创建虚拟环境于: {env_path}")
+        subprocess.run(["uv", "venv", "--python", python_bin_path, str(env_path)], check=True)
         for cmd in scripts:
-            # 用 VIRTUAL_ENV + PATH 注入方式替代 source
             env = {
                 **os.environ,
                 "VIRTUAL_ENV": str(env_path),
                 "PATH": f"{env_path}/bin:{os.environ['PATH']}"
             }
             subprocess.run(
-                cmd,
-                shell=True,
-                check=True,
-                executable="/bin/bash",
-                env=env,
+                cmd, shell=True, check=True, executable="/bin/bash", env=env
             )
+    else:
+        print(f"[INFO] 发现缓存的环境，直接使用: {env_path}")
+
+    # --- 终极修复：在此处注入环境变量 ---
+    # 强制将新创建的环境的bin目录添加到当前运行进程的PATH变量的最前面
+    # 这样，后续所有shell命令（如 'python'）都会优先使用我们这个环境里的版本
+    os.environ["PATH"] = f"{env_path}/bin:{os.environ['PATH']}"
+    print(f"[INFO] 注入成功: 后续所有命令将优先使用 '{env_path}/bin' 中的工具。")
+    # --- 修复结束 ---
+    
     return env_path
