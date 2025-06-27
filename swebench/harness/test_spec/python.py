@@ -338,15 +338,14 @@ def make_repo_script_list_py(
 # ======================================================================================
 #                       最终版 make_env_script_list_py 函数
 # ======================================================================================
-# In harness/test_spec/python.py
-
 def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
     """
     生成一个统一的、用于安装所有Python依赖的脚本命令列表，并返回所使用的环境管理器类型。
     """
     HEREDOC_DELIMITER = "EOF_59812759871"
     
-    # 将 UV 安装参数的定义移到函数顶部，确保它们在所有逻辑分支中都可用
+    # 关键修复1: 将 UV 安装参数的定义移到函数顶部，确保它们在所有逻辑分支中都可用。
+    # 这将彻底解决 UnboundLocalError 的问题。
     PYPI_MIRROR = "--index-url https://pypi.tuna.tsinghua.edu.cn/simple"
     TRUSTED_HOST = "--trusted-host pypi.tuna.tsinghua.edu.cn"
     UV_INSTALL_ARGS = f"{PYPI_MIRROR} {TRUSTED_HOST}"
@@ -380,28 +379,18 @@ def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
         env_manager = "uv"
         print(f"✓ 依赖类型: {pkgs_type}，使用 {env_manager.upper()} 策略。")
         
-        # ===================================================================
-        # START: 最终修改部分
-        # ===================================================================
-        # 在系统依赖列表中，增加 libfreetype-dev 来解决 matplotlib 的编译问题
-        system_packages = "pkg-config libcairo2-dev libgirepository1.0-dev libfreetype-dev"
-        # ===================================================================
-        # END: 最终修改部分
-        
-        apt_install_cmd = (
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y "
-            "-o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' "
-            f"{system_packages}"
-        )
-        
+        # 定义需要预安装的系统C库
+        system_packages = "pkg-config libcairo2-dev libgirepository1.0-dev"
         cmds.extend([
             "apt-get update",
-            apt_install_cmd,
+            f"apt-get install -y {system_packages}",
             "ldconfig"
         ])
         
+        # 定义强制注入的环境变量，解决 pkg-config 路径问题
         ENV_PREFIX = "env PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig"
         
+        # 关键修复2: 使用精简的逻辑直接处理依赖，不再需要任何复杂的辅助函数。
         reqs_text = get_requirements(instance) if pkgs_type == "requirements.txt" else pkgs_type.replace(' ', '\n')
         
         if reqs_text and reqs_text.strip():
@@ -412,12 +401,13 @@ def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
                 f"rm {path_to_reqs}"
             ])
 
-    # 额外的 pip 包安装
+    # 额外的 pip 包安装。这段代码现在可以安全地使用在函数顶部定义的 UV_INSTALL_ARGS 了。
     if "pip_packages" in specs:
         pip_packages = " ".join(specs["pip_packages"])
         cmds.append(f"uv pip install {pip_packages} {UV_INSTALL_ARGS}")
         
     return cmds, env_manager
+
 
 
 
