@@ -335,27 +335,20 @@ def make_repo_script_list_py(
 
 # (请确保此文件顶部有 import yaml, 以及 get_requirements, get_environment_yml 等辅助函数)
 
+# ======================================================================================
+#                       最终版 make_env_script_list_py 函数
+# ======================================================================================
 def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
     """
     生成一个统一的、用于安装所有Python依赖的脚本命令列表，并返回所使用的环境管理器类型。
-    
-    Returns:
-        一个元组，包含:
-        - list[str]: 要执行的命令列表。
-        - str: 要使用的环境管理器 ('uv' 或 'conda')。
     """
     HEREDOC_DELIMITER = "EOF_59812759871"
     
-    # ===================================================================
-    # START: 关键修正
-    # 将 UV 安装参数的定义移到函数顶部，确保它们在所有逻辑分支中都可用。
-    # ===================================================================
+    # 关键修复1: 将 UV 安装参数的定义移到函数顶部，确保它们在所有逻辑分支中都可用。
+    # 这将彻底解决 UnboundLocalError 的问题。
     PYPI_MIRROR = "--index-url https://pypi.tuna.tsinghua.edu.cn/simple"
     TRUSTED_HOST = "--trusted-host pypi.tuna.tsinghua.edu.cn"
     UV_INSTALL_ARGS = f"{PYPI_MIRROR} {TRUSTED_HOST}"
-    # ===================================================================
-    # END: 关键修正
-    # ===================================================================
 
     # 从 specs 配置中获取依赖类型
     pkgs_type = specs.get("packages", "requirements.txt")
@@ -370,17 +363,23 @@ def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
         yml_content = get_environment_yml(instance, env_name)
         path_to_yml = "environment.yml"
         
-        cmds.append(
-            f"cat <<'{HEREDOC_DELIMITER}' > {path_to_yml}\n{yml_content}\n{HEREDOC_DELIMITER}"
-        )
-        cmds.append(f"conda env create --file {path_to_yml} --name {env_name} --force")
-        cmds.append(f"rm {path_to_yml}")
+        cmds.extend([
+            # 在执行任何 conda 网络操作之前，先设置 ssl_verify 为 false
+            "conda config --set ssl_verify false",
+            # 使用 Heredoc 将 yml 内容写入容器内的文件
+            f"cat <<'{HEREDOC_DELIMITER}' > {path_to_yml}\n{yml_content}\n{HEREDOC_DELIMITER}",
+            # 生成 Conda 命令来创建新环境
+            f"conda env create --file {path_to_yml} --name {env_name} --force",
+            # 清理临时文件
+            f"rm {path_to_yml}"
+        ])
 
     else:
         # 策略二：对于 requirements.txt 或直接的包名，使用我们优化好的 uv 流程
         env_manager = "uv"
         print(f"✓ 依赖类型: {pkgs_type}，使用 {env_manager.upper()} 策略。")
         
+        # 定义需要预安装的系统C库
         system_packages = "pkg-config libcairo2-dev libgirepository1.0-dev"
         cmds.extend([
             "apt-get update",
@@ -388,17 +387,19 @@ def make_env_script_list_py(instance, specs, env_name) -> tuple[list[str], str]:
             "ldconfig"
         ])
         
+        # 定义强制注入的环境变量，解决 pkg-config 路径问题
         ENV_PREFIX = "env PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig"
         
-        reqs_text = get_dependencies_as_requirements_text(instance, specs, env_name)
+        # 关键修复2: 使用精简的逻辑直接处理依赖，不再需要任何复杂的辅助函数。
+        reqs_text = get_requirements(instance) if pkgs_type == "requirements.txt" else pkgs_type.replace(' ', '\n')
         
         if reqs_text and reqs_text.strip():
             path_to_reqs = "requirements.txt"
-            cmds.append(
-                f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs_text}\n{HEREDOC_DELIMITER}"
-            )
-            cmds.append(f"{ENV_PREFIX} uv pip install -r {path_to_reqs} {UV_INSTALL_ARGS}")
-            cmds.append(f"rm {path_to_reqs}")
+            cmds.extend([
+                f"cat <<'{HEREDOC_DELIMITER}' > {path_to_reqs}\n{reqs_text}\n{HEREDOC_DELIMITER}",
+                f"{ENV_PREFIX} uv pip install -r {path_to_reqs} {UV_INSTALL_ARGS}",
+                f"rm {path_to_reqs}"
+            ])
 
     # 额外的 pip 包安装。这段代码现在可以安全地使用在函数顶部定义的 UV_INSTALL_ARGS 了。
     if "pip_packages" in specs:
