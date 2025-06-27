@@ -70,69 +70,70 @@ def get_test_specs_from_dataset(
 def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
     if isinstance(instance, TestSpec):
         return instance
-    # 从原始实例中提取元数据。
+    
     instance_id = instance[KEY_INSTANCE_ID]
     repo = instance["repo"]
     version = instance.get("version")
     base_commit = instance["base_commit"]
     test_patch = instance["test_patch"]
 
-    # 定义一个内部辅助函数，用于处理可能是JSON字符串或已解析对象的字段。
     def _from_json_or_obj(key: str) -> Any:
-        if key not in instance:
-            return []
-        if isinstance(instance[key], str):
-            return json.loads(instance[key])
+        if key not in instance: return []
+        if isinstance(instance[key], str): return json.loads(instance[key])
         return instance[key]
 
-    # 解析预期的测试通过情况。
     pass_to_pass = _from_json_or_obj("PASS_TO_PASS")
     fail_to_pass = _from_json_or_obj("FAIL_TO_PASS")
 
-    env_name = "testbed"
-    repo_directory = f"{env_name}"
-    # 根据仓库和版本，从常量映射中获取特定的构建规范。
+    # 定义一个临时的、固定的仓库目录名
+    repo_directory = "testbed"
+    
+    # ===================================================================
+    # START: 缓存修复逻辑
+    # ===================================================================
+
+    # 1. 定义一个唯一的占位符。
+    ENV_NAME_PLACEHOLDER = "___ENV_NAME_PLACEHOLDER___"
+    
+    # 2. 调用分发函数，但传递的是占位符而不是具体的名字。
+    #    这样生成的脚本列表，除了名字部分，其他都已确定。
     specs = MAP_REPO_VERSION_TO_SPECS[repo][version]
-
-    # 调用分发函数，生成用于设置仓库、环境和评估的命令列表。
-    repo_script_list = make_repo_script_list(specs, repo, repo_directory, base_commit, env_name)
+    env_script_list, env_manager = make_env_script_list(instance, specs, ENV_NAME_PLACEHOLDER)
     
-    # ===================================================================
-    # START: 修改部分 2
-    # 接收 make_env_script_list 返回的元组，并将其解包到两个变量中
-    env_script_list, env_manager = make_env_script_list(instance, specs, env_name)
-    # ===================================================================
-    # END: 修改部分 2
-    
-    eval_script_list = make_eval_script_list(instance, specs, env_name, repo_directory, base_commit, test_patch)
-
-    # 检测当前运行环境的系统架构（如 x86_64 或 arm64），以实现跨平台兼容。
-    if platform.machine() in {"aarch64", "arm64"}:
-        arch = "arm64" if instance_id not in USE_X86 else "x86_64"
-    else:
-        arch = "x86_64"
-
-    # 通过对环境设置脚本列表进行哈希计算，生成一个唯一的环境密钥 (env_key)。
-    # 这个密钥是实现环境缓存、避免重复构建相同环境的关键。
+    # 3. 基于这个含有占位符的脚本列表，计算一个稳定的哈希值 (env_key)。
+    #    这个 key 现在可以作为我们期望的、唯一的环境名称。
     hash_key = str(env_script_list)
     hash_object = hashlib.sha256()
     hash_object.update(hash_key.encode("utf-8"))
     env_key = hash_object.hexdigest()[:22]
 
-    # 将所有收集和生成的信息组装成一个完整的 TestSpec 对象并返回。
+    # 4. 关键一步：将脚本列表中的占位符，替换为我们刚刚计算出的、真正的环境名 (env_key)。
+    final_env_script_list = [s.replace(ENV_NAME_PLACEHOLDER, env_key) for s in env_script_list]
+    
+    # ===================================================================
+    # END: 缓存修复逻辑
+    # ===================================================================
+
+    # 生成其他的脚本列表
+    repo_script_list = make_repo_script_list(specs, repo, repo_directory, base_commit, env_key)
+    eval_script_list = make_eval_script_list(instance, specs, env_key, repo_directory, base_commit, test_patch)
+    
+    # 检测系统架构
+    if platform.machine() in {"aarch64", "arm64"}:
+        arch = "arm64" if instance_id not in USE_X86 else "x86_64"
+    else:
+        arch = "x86_64"
+
+    # 将所有信息组装成 TestSpec 对象
     return TestSpec(
         instance_id=instance_id,
         repo=repo,
-        env_script_list=env_script_list,
+        # 使用我们最终修正过的脚本列表
+        env_script_list=final_env_script_list,
         repo_script_list=repo_script_list,
         eval_script_list=eval_script_list,
         version=version,
-        # ===============================================================
-        # START: 修改部分 3
-        # 在创建 TestSpec 实例时，传入新增的 env_manager
         env_manager=env_manager,
-        # ===============================================================
-        # END: 修改部分 3
         arch=arch,
         FAIL_TO_PASS=fail_to_pass,
         PASS_TO_PASS=pass_to_pass,
