@@ -17,19 +17,12 @@ LEGACY_TRIGGERS = {
     "scipy": parse("1.7.0"),
 }
 
-# --- 路径配置 (已根据您的要求修改) ---
-# 1. 定义您的数据盘根目录
-#    所有环境和缓存都将安装在此目录下
-BASE_STORAGE_PATH = Path("/root/autodl-tmp")
-
-# 2. 为不同类型的环境和缓存定义子目录，保持结构清晰
-#    UV 环境将被安装在 /root/autodl-tmp/swe_uv_envs/
-UV_ENVS_DIR = BASE_STORAGE_PATH / "swe_uv_envs"
-#    Conda 环境将被安装在 /root/autodl-tmp/swe_conda_envs/
-CONDA_ENVS_DIR = BASE_STORAGE_PATH / "swe_conda_envs"
-
-#    原有的 CACHE_DIR 逻辑，现在也重定向到数据盘
-CACHE_DIR = BASE_STORAGE_PATH / "swebench_cache"
+# --- 路径配置 (修改后) ---
+# 将不同类型的环境分目录管理，更加清晰
+CACHE_DIR = Path.home() / ".cache" / "swebench"
+UV_ENVS_DIR = CACHE_DIR / "uv_envs"
+# Conda 环境的默认安装路径
+CONDA_ENVS_DIR = Path(os.environ.get("CONDA_PREFIX", "/root/miniconda3")) / "envs"
 
 
 def _hash_scripts(scripts: list[str]) -> str:
@@ -91,36 +84,23 @@ def create_env(
     # 核心分支逻辑：根据 env_manager 选择不同的路径和创建方法
     if env_manager == "conda":
         env_name = env_key  # 对于 conda，我们用 key 作为环境名
-        # 使用我们新配置的 CONDA_ENVS_DIR
         env_path = CONDA_ENVS_DIR / env_name
-        print(f"✓ [CONDA] 策略启动，目标环境: {env_name} (位于: {env_path})")
+        print(f"✓ [CONDA] 策略启动，目标环境: {env_name}")
         
         # 检查 Conda 环境是否已缓存
         if not env_path.exists():
             env_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"[CONDA] 缓存未命中，正在创建名为 '{env_name}' 的新 Conda 环境...")
             
-            # 由于我们不再使用默认的 conda envs 路径，
-            # 需要在 conda create 命令中用 --prefix 明确指定安装位置。
-            # 这里我们假设 install_scripts 包含 'conda env create' 命令，需要对其进行修改。
-            
+            # 直接执行由 make_env_script_list_py 生成的 conda 命令
+            # 这些命令通常是 'conda env create -f ...'
             for cmd in install_scripts:
-                # 智能地修改 conda 命令以使用 --prefix
-                if "conda env create" in cmd or "conda create" in cmd:
-                    # 移除可能存在的 -n 或 --name 参数，替换为 --prefix
-                    cmd = re.sub(r'(-n|--name)\s+\S+', '', cmd)
-                    # 确保命令中包含 --prefix
-                    if "--prefix" not in cmd:
-                        # 在 create 命令后插入 prefix 参数
-                        cmd = cmd.replace("create", f"create --prefix {env_path}", 1)
-                
                 print(f"[CONDA] 执行命令: {cmd}")
                 subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
         else:
-            print(f"[CONDA] 发现缓存的 Conda 环境，直接使用: {env_path}")
+            print(f"[CONDA] 发现缓存的 Conda 环境，直接使用: {env_name}")
     
     elif env_manager == "uv":
-        # 使用我们新配置的 UV_ENVS_DIR
         env_path = UV_ENVS_DIR / env_key
         print(f"✓ [UV] 策略启动，目标环境路径: {env_path}")
 
