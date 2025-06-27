@@ -64,6 +64,7 @@ def close_logger(logger):
 
 
 ###核心流程：运行实例
+### 核心流程：运行实例 (最终修改版)
 def run_instance(
     test_spec: TestSpec,
     pred: dict,
@@ -78,9 +79,19 @@ def run_instance(
 
     # 定义评估报告的路径
     report_path = log_dir / LOG_REPORT
-    # ... (报告缓存逻辑保持不变)
+    # (报告缓存逻辑保持不变)
     if rewrite_reports:
-        # ...
+        test_output_path = log_dir / LOG_TEST_OUTPUT
+        if not test_output_path.exists():
+            raise ValueError(f"Test output file {test_output_path} does not exist")
+        report = get_eval_report(
+            test_spec=test_spec,
+            prediction=pred,
+            test_log_path=test_output_path,
+            include_tests_status=True,
+        )
+        with open(report_path, "w") as f:
+            f.write(json.dumps(report, indent=4))
         return instance_id, report
     if report_path.exists():
         return instance_id, json.loads(report_path.read_text())
@@ -90,29 +101,21 @@ def run_instance(
     log_file = log_dir / LOG_INSTANCE
     logger = setup_logger(instance_id, log_file)
 
-    # ===================================================================
-    # START: 修改部分 2 - 修改 create_env 的调用方式
-    # ===================================================================
     # 创建一个隔离的虚拟环境用于测试
-    # 我们现在将 test_spec 中携带的 env_manager 信号传递给 create_env
-    # 让 create_env 自己决定是使用 uv 还是 conda
     print(f"✓ 即将为实例 {instance_id} 创建环境，使用管理器: {test_spec.env_manager.upper()}")
     env_path = create_env(
         install_scripts=test_spec.env_script_list,
         env_manager=test_spec.env_manager,
         env_key=test_spec.env_key
     )
-    # ===================================================================
-    # END: 修改部分 2
-    # ===================================================================
 
-    # 创建一个干净的工作目录，如果已存在则先删除
+    # 创建一个干净的工作目录
     work_dir = log_dir / "work"
     if work_dir.exists():
         subprocess.run(["rm", "-rf", str(work_dir)])
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # ... (后续所有准备脚本、应用补丁、运行测试、生成报告的逻辑都保持不变)
+    # 生成所有需要的脚本文件
     repo_script = log_dir / "repo.sh"
     repo_script.write_text(test_spec.install_repo_script)
     eval_script = log_dir / "eval.sh"
@@ -121,6 +124,7 @@ def run_instance(
     patch_file.write_text(pred[KEY_PREDICTION] or "")
 
     try:
+        # 第一步：运行仓库安装脚本
         subprocess.run(
             f"bash {repo_script.resolve()}",
             shell=True,
@@ -130,13 +134,27 @@ def run_instance(
             env={**os.environ, "VIRTUAL_ENV": str(env_path)},
         )
         
+        # 第二步：尝试应用代码补丁
         repo_dir = work_dir / "testbed"
         applied_patch = False
         for git_apply_cmd in GIT_APPLY_CMDS:
-            # ...
-            # 此处的激活命令对于 uv 和 conda 创建的环境都是通用的
-            full_cmd = f"source {env_path}/bin/activate && {git_apply_cmd} {patch_file.resolve()}"
-            # ... (后续不变)
+            
+            # ===================================================================
+            # START: 最终修改部分
+            # 在应用补丁前，先用 git config 放宽检查，提高成功率
+            # ===================================================================
+            git_config_commands = [
+                "git config core.fileMode false",         # 忽略文件权限变化
+                "git config core.autocrlf false",       # 忽略换行符自动转换
+                "git config apply.ignoreWhitespace change"  # 忽略空白变化
+            ]
+            git_config_cmd_str = " && ".join(git_config_commands)
+            
+            # 将 git config 和 git apply 命令串联起来
+            full_cmd = f"source {env_path}/bin/activate && {git_config_cmd_str} && {git_apply_cmd} {patch_file.resolve()}"
+            # ===================================================================
+            # END: 最终修改部分
+            
             logger.info(f"Trying patch command: {full_cmd}")
             val = subprocess.run(
                 full_cmd, shell=True, cwd=repo_dir, capture_output=True,
@@ -150,9 +168,9 @@ def run_instance(
                 logger.warning(f"Patch failed: {git_apply_cmd}\nSTDOUT: {val.stdout}\nSTDERR: {val.stderr}")
         
         if not applied_patch:
-            # ...
             raise EvaluationError(instance_id, f"{APPLY_PATCH_FAIL}: {val.stdout}", logger)
 
+        # 第三步：运行评估脚本
         with open(log_dir / "eval_out.txt", "w") as f:
             try:
                 subprocess.run(
@@ -164,6 +182,7 @@ def run_instance(
                 f.write(f"\n\nTimeout error: {timeout} seconds exceeded.")
                 raise EvaluationError(instance_id, f"Test timed out after {timeout} seconds.", logger)
 
+        # 第四步：生成评估报告
         report = get_eval_report(
             test_spec=test_spec, prediction=pred,
             test_log_path=log_dir / "eval_out.txt", include_tests_status=True,
