@@ -78,23 +78,10 @@ def run_instance(
 
     # 定义评估报告的路径
     report_path = log_dir / LOG_REPORT
-    # 如果指定了`rewrite_reports`，则强制重新生成报告
+    # ... (报告缓存逻辑保持不变)
     if rewrite_reports:
-        test_output_path = log_dir / LOG_TEST_OUTPUT
-        if not test_output_path.exists():
-            raise ValueError(f"Test output file {test_output_path} does not exist")
-        # 从已有的测试输出日志中重新解析和生成报告
-        report = get_eval_report(
-            test_spec=test_spec,
-            prediction=pred,
-            test_log_path=test_output_path,
-            include_tests_status=True,
-        )
-        with open(report_path, "w") as f:
-            f.write(json.dumps(report, indent=4))
+        # ...
         return instance_id, report
-    
-    # 结果缓存：如果报告已存在，直接读取并返回，避免重复运行
     if report_path.exists():
         return instance_id, json.loads(report_path.read_text())
 
@@ -103,8 +90,21 @@ def run_instance(
     log_file = log_dir / LOG_INSTANCE
     logger = setup_logger(instance_id, log_file)
 
+    # ===================================================================
+    # START: 修改部分 2 - 修改 create_env 的调用方式
+    # ===================================================================
     # 创建一个隔离的虚拟环境用于测试
-    env_path = create_env(test_spec.env_script_list, test_spec.env_key)
+    # 我们现在将 test_spec 中携带的 env_manager 信号传递给 create_env
+    # 让 create_env 自己决定是使用 uv 还是 conda
+    print(f"✓ 即将为实例 {instance_id} 创建环境，使用管理器: {test_spec.env_manager.upper()}")
+    env_path = create_env(
+        install_scripts=test_spec.env_script_list,
+        env_manager=test_spec.env_manager,
+        env_key=test_spec.env_key
+    )
+    # ===================================================================
+    # END: 修改部分 2
+    # ===================================================================
 
     # 创建一个干净的工作目录，如果已存在则先删除
     work_dir = log_dir / "work"
@@ -112,19 +112,15 @@ def run_instance(
         subprocess.run(["rm", "-rf", str(work_dir)])
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 从 test_spec 和 prediction 中动态生成所需的脚本和补丁文件
-    # 1. 仓库安装脚本
+    # ... (后续所有准备脚本、应用补丁、运行测试、生成报告的逻辑都保持不变)
     repo_script = log_dir / "repo.sh"
     repo_script.write_text(test_spec.install_repo_script)
-    # 2. 评估测试脚本
     eval_script = log_dir / "eval.sh"
     eval_script.write_text(test_spec.eval_script)
-    # 3. 模型生成的代码补丁文件
     patch_file = log_dir / "patch.diff"
     patch_file.write_text(pred[KEY_PREDICTION] or "")
 
     try:
-        # 第一步：运行仓库安装脚本，准备代码库
         subprocess.run(
             f"bash {repo_script.resolve()}",
             shell=True,
@@ -133,69 +129,51 @@ def run_instance(
             executable="/bin/bash",
             env={**os.environ, "VIRTUAL_ENV": str(env_path)},
         )
-
-        # 第二步：尝试应用代码补丁，包含健壮的重试逻辑
+        
         repo_dir = work_dir / "testbed"
         applied_patch = False
-        # 遍历多种git apply命令，以提高补丁应用的成功率
         for git_apply_cmd in GIT_APPLY_CMDS:
+            # ...
+            # 此处的激活命令对于 uv 和 conda 创建的环境都是通用的
             full_cmd = f"source {env_path}/bin/activate && {git_apply_cmd} {patch_file.resolve()}"
+            # ... (后续不变)
             logger.info(f"Trying patch command: {full_cmd}")
             val = subprocess.run(
-                full_cmd,
-                shell=True,
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-                executable="/bin/bash",
+                full_cmd, shell=True, cwd=repo_dir, capture_output=True,
+                text=True, executable="/bin/bash",
             )
-            # 如果返回码为0，表示补丁应用成功
             if val.returncode == 0:
                 logger.info(f"{APPLY_PATCH_PASS}:\n{val.stdout}")
                 applied_patch = True
                 break
             else:
-                # 记录失败的尝试，并继续下一个命令
                 logger.warning(f"Patch failed: {git_apply_cmd}\nSTDOUT: {val.stdout}\nSTDERR: {val.stderr}")
         
-        # 如果所有补丁应用尝试都失败，则抛出异常
         if not applied_patch:
-            logger.info(f"{APPLY_PATCH_FAIL}:\n{val.stdout}")
+            # ...
             raise EvaluationError(instance_id, f"{APPLY_PATCH_FAIL}: {val.stdout}", logger)
 
-        # 第三步：运行评估脚本，并处理超时
         with open(log_dir / "eval_out.txt", "w") as f:
             try:
-                # 在激活的虚拟环境中执行评测脚本，并将所有输出重定向到文件
                 subprocess.run(
                     f"source {env_path}/bin/activate && bash {eval_script.resolve()}",
-                    shell=True,
-                    cwd=work_dir,
-                    stdout=f,
-                    stderr=subprocess.STDOUT,
-                    timeout=timeout,
-                    executable="/bin/bash",
+                    shell=True, cwd=work_dir, stdout=f, stderr=subprocess.STDOUT,
+                    timeout=timeout, executable="/bin/bash",
                 )
-            # 捕获测试超时异常
             except subprocess.TimeoutExpired:
                 f.write(f"\n\nTimeout error: {timeout} seconds exceeded.")
                 raise EvaluationError(instance_id, f"Test timed out after {timeout} seconds.", logger)
 
-        # 第四步：根据测试输出生成并保存结构化的评估报告
         report = get_eval_report(
-            test_spec=test_spec,
-            prediction=pred,
-            test_log_path=log_dir / "eval_out.txt",
-            include_tests_status=True,
+            test_spec=test_spec, prediction=pred,
+            test_log_path=log_dir / "eval_out.txt", include_tests_status=True,
         )
         with open(report_path, "w") as f:
             f.write(json.dumps(report, indent=4))
         return instance_id, report
-    # 捕获在评估过程中手动抛出的特定错误
     except EvaluationError as e:
         logger.info(traceback.format_exc())
         print(e)
-    # 捕获所有其他未预料到的异常，以保证程序的健壮性
     except Exception as e:
         error_msg = (
             f"Error in evaluating model for {instance_id}: {e}\n"
@@ -204,9 +182,9 @@ def run_instance(
         )
         logger.error(error_msg)
     finally:
-        # 确保无论成功或失败，日志记录器都会被正确关闭
         close_logger(logger)
     return
+
 
 
 

@@ -29,6 +29,12 @@ class TestSpec:
     eval_script_list: list[str]
     env_script_list: list[str]
     env_key: str
+    # ===================================================================
+    # START: 修改部分 1
+    # 新增此字段，用于携带环境管理器的类型信号 ('uv' 或 'conda')
+    env_manager: str
+    # ===================================================================
+    # END: 修改部分 1
     arch: str
     FAIL_TO_PASS: list[str]
     PASS_TO_PASS: list[str]
@@ -90,7 +96,14 @@ def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
 
     # 调用分发函数，生成用于设置仓库、环境和评估的命令列表。
     repo_script_list = make_repo_script_list(specs, repo, repo_directory, base_commit, env_name)
-    env_script_list = make_env_script_list(instance, specs, env_name)
+    
+    # ===================================================================
+    # START: 修改部分 2
+    # 接收 make_env_script_list 返回的元组，并将其解包到两个变量中
+    env_script_list, env_manager = make_env_script_list(instance, specs, env_name)
+    # ===================================================================
+    # END: 修改部分 2
+    
     eval_script_list = make_eval_script_list(instance, specs, env_name, repo_directory, base_commit, test_patch)
 
     # 检测当前运行环境的系统架构（如 x86_64 或 arm64），以实现跨平台兼容。
@@ -114,6 +127,12 @@ def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
         repo_script_list=repo_script_list,
         eval_script_list=eval_script_list,
         version=version,
+        # ===============================================================
+        # START: 修改部分 3
+        # 在创建 TestSpec 实例时，传入新增的 env_manager
+        env_manager=env_manager,
+        # ===============================================================
+        # END: 修改部分 3
         arch=arch,
         FAIL_TO_PASS=fail_to_pass,
         PASS_TO_PASS=pass_to_pass,

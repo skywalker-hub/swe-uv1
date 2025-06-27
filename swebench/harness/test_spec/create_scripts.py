@@ -33,20 +33,25 @@ def make_repo_script_list(specs, repo, repo_directory, base_commit, env_name) ->
 
 
 # 该函数是生成“环境设置”脚本命令的分发器。
-def make_env_script_list(instance, specs, env_name) -> list:
+# 该函数是生成“环境设置”脚本命令的分发器。
+def make_env_script_list(instance, specs, env_name) -> tuple[list[str], str]:
     """
-    Creates the list of commands to set up the environment for testing.
-    This is the setup script for the environment image.
+    Creates the list of commands to set up the environment for testing, 
+    and returns the appropriate environment manager type.
     """
     # 1. 根据实例的仓库名称确定语言。
     ext = MAP_REPO_TO_EXT[instance["repo"]]
-    # 2. 动态选择策略：优先使用Python的专属环境设置函数，否则使用通用函数。
-    #    这种设计使得在未来支持新语言时，只需添加新函数和新映射即可，无需修改此处的逻辑。
-    func = {
-        "py": make_env_script_list_py,
-    }.get(ext, make_env_script_list_common)
-    # 3. 执行所选的函数。
-    return func(instance, specs, env_name)
+    
+    # 2. 核心修改：为不同的语言路径提供不同的处理方式
+    if ext == "py":
+        # 如果是Python，直接调用我们修改好的 _py 函数，它会返回 (scripts, env_manager) 元组
+        return make_env_script_list_py(instance, specs, env_name)
+    else:
+        # 对于其他通用语言，我们假设它们默认使用 uv 环境。
+        # 调用原来的 common 函数，它只返回一个脚本列表。
+        scripts = make_env_script_list_common(instance, specs, env_name)
+        # 我们手动将它包装成我们需要的元组格式，并指定默认的管理器为 'uv'。
+        return scripts, "uv"
 
 
 # 该函数是生成“执行评估”脚本命令的分发器。
