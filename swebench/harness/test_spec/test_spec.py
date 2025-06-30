@@ -64,9 +64,11 @@ def get_test_specs_from_dataset(
 def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
     if isinstance(instance, TestSpec):
         return instance
-    # 从原始实例中提取元数据。
+    # 从原始数据集的实例项中提取数据。
     instance_id = instance[KEY_INSTANCE_ID]
+    #项目库的名字
     repo = instance["repo"]
+    #从数据集获取库的版本
     version = instance.get("version")
     base_commit = instance["base_commit"]
     test_patch = instance["test_patch"]
@@ -85,10 +87,11 @@ def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
 
     env_name = "testbed"
     repo_directory = f"{env_name}"
-    # 根据仓库和版本，从常量映射中获取特定的构建规范。
+
+    #################根据仓库和版本，从常量映射中获取特定的构建规范。
     specs = MAP_REPO_VERSION_TO_SPECS[repo][version]
 
-    # 调用分发函数，生成用于设置仓库、环境和评估的命令列表。
+    #################调用分发函数，生成用于设置仓库、环境和评估的命令列表。
     repo_script_list = make_repo_script_list(specs, repo, repo_directory, base_commit, env_name)
     env_script_list = make_env_script_list(instance, specs, env_name)
     eval_script_list = make_eval_script_list(instance, specs, env_name, repo_directory, base_commit, test_patch)

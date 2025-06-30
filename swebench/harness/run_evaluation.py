@@ -103,16 +103,16 @@ def run_instance(
     log_file = log_dir / LOG_INSTANCE
     logger = setup_logger(instance_id, log_file)
 
-    # 创建一个隔离的虚拟环境用于测试
+    ###############创建一个隔离的虚拟环境用于测试，返回环境地址
     env_path = create_env(test_spec.env_script_list, test_spec.env_key)
 
-    # 创建一个干净的工作目录，如果已存在则先删除
+    ###############创建一个干净的工作目录，如果已存在则先删除
     work_dir = log_dir / "work"
     if work_dir.exists():
         subprocess.run(["rm", "-rf", str(work_dir)])
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 从 test_spec 和 prediction 中动态生成所需的脚本和补丁文件
+    ###############从 test_spec 和 prediction 中动态生成所需的脚本和补丁文件
     # 1. 仓库安装脚本
     repo_script = log_dir / "repo.sh"
     repo_script.write_text(test_spec.install_repo_script)
