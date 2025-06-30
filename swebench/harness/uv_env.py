@@ -1,4 +1,4 @@
-###实现对旧版Python的兼容
+###实现对旧版Python的兼容 
 
 import hashlib
 import subprocess
