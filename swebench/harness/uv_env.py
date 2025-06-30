@@ -8,6 +8,8 @@ import os
 import re
 from packaging.version import parse
 
+
+
 # --- 最终配置 ---
 LEGACY_PYTHON_ENV_NAME = "py38"
 LEGACY_PYTHON_PATH = f"/root/miniconda3/envs/{LEGACY_PYTHON_ENV_NAME}/bin/python"
@@ -23,15 +25,21 @@ LEGACY_TRIGGERS = {
 CACHE_DIR = Path("/root/autodl-tmp") / ".cache" / "swebench" / "envs"
 # --- 修改结束 ---
 
+
+
 def _hash_scripts(scripts: list[str]) -> str:
     """为安装脚本列表生成一个唯一的哈希值，用作环境名称。"""
     m = hashlib.sha256()
     m.update("\n".join(scripts).encode())
     return m.hexdigest()[:22]
 
+
+
 def get_env_path(env_key: str) -> Path:
     """根据环境键名获取完整的环境路径。"""
     return CACHE_DIR / env_key
+
+
 
 def _decide_python_version(scripts: list[str]) -> (str, str):
     """根据依赖列表决定是使用旧版还是新版Python。"""
@@ -65,6 +73,9 @@ def _decide_python_version(scripts: list[str]) -> (str, str):
         if not python_bin_path:
             raise RuntimeError(f"在主环境中找不到默认的Python版本 {MODERN_PYTHON_BIN}。")
         return python_bin_path, MODERN_PYTHON_BIN
+
+
+
 
 def create_env(scripts: list[str], env_key: str | None = None) -> Path:
     """根据依赖动态选择Python版本，创建uv管理的环境并运行安装脚本。"""
