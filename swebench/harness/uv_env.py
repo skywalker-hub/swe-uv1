@@ -18,17 +18,23 @@ LEGACY_TRIGGERS = {
 }
 # --- 配置结束 ---
 
-CACHE_DIR = Path.home() / ".cache" / "swebench" / "envs"
+# --- 主要修改点 ---
+# 将缓存根目录修改到 /root/autodl-tmp 数据盘下
+CACHE_DIR = Path("/root/autodl-tmp") / ".cache" / "swebench" / "envs"
+# --- 修改结束 ---
 
 def _hash_scripts(scripts: list[str]) -> str:
+    """为安装脚本列表生成一个唯一的哈希值，用作环境名称。"""
     m = hashlib.sha256()
     m.update("\n".join(scripts).encode())
     return m.hexdigest()[:22]
 
 def get_env_path(env_key: str) -> Path:
+    """根据环境键名获取完整的环境路径。"""
     return CACHE_DIR / env_key
 
 def _decide_python_version(scripts: list[str]) -> (str, str):
+    """根据依赖列表决定是使用旧版还是新版Python。"""
     use_legacy_python = False
     pattern = re.compile(r"([a-zA-Z0-9_.-]+)\s*([<>=!~]+)\s*([0-9\.]+)")
     for command in scripts:
@@ -42,7 +48,9 @@ def _decide_python_version(scripts: list[str]) -> (str, str):
                         print(f"[INFO] 检测到旧版依赖: '{package}{comparator}{version_str}'")
                         use_legacy_python = True
                 except Exception:
+                    # 如果版本号解析失败，则忽略
                     continue
+    
     if use_legacy_python:
         print(f"[INFO] 最终决定: 由于检测到旧版依赖，将使用隔离环境 '{LEGACY_PYTHON_ENV_NAME}' 中的Python。")
         if not Path(LEGACY_PYTHON_PATH).exists():
@@ -65,7 +73,9 @@ def create_env(scripts: list[str], env_key: str | None = None) -> Path:
     env_path = get_env_path(env_key)
 
     if not env_path.exists():
+        # 确保缓存的父目录存在
         env_path.parent.mkdir(parents=True, exist_ok=True)
+        
         python_bin_path, python_version_str = _decide_python_version(scripts)
         print(f"[{python_version_str.upper()}] 正在使用 {python_bin_path} 创建虚拟环境于: {env_path}")
         subprocess.run(["uv", "venv", "--python", python_bin_path, str(env_path)], check=True)
@@ -85,19 +95,41 @@ def create_env(scripts: list[str], env_key: str | None = None) -> Path:
         )
         # --- 改动结束 ---
 
+        # 依次执行安装脚本
         for cmd in scripts:
             dep_env = {
                 **os.environ,
                 "VIRTUAL_ENV": str(env_path),
                 "PATH": f"{env_path}/bin:{os.environ['PATH']}"
             }
+            print(f"[{python_version_str.upper()}] 正在执行安装命令: {cmd}")
             subprocess.run(
                 cmd, shell=True, check=True, executable="/bin/bash", env=dep_env
             )
     else:
         print(f"[INFO] 发现缓存的环境，直接使用: {env_path}")
 
+    # 将新创建或已存在的环境路径注入到当前进程的环境变量中
     os.environ["PATH"] = f"{env_path}/bin:{os.environ['PATH']}"
     print(f"[INFO] 注入成功: 后续所有命令将优先使用 '{env_path}/bin' 中的工具。")
     
     return env_path
+
+# --- 使用示例 ---
+# if __name__ == '__main__':
+#     # 示例1: 安装一个需要旧版 numpy 的库
+#     print("--- 场景1: 触发旧版Python ---")
+#     old_requirements = ["pip install 'numpy<1.22' pandas"]
+#     create_env(old_requirements)
+#     print("-" * 20 + "\n")
+#
+#     # 示例2: 安装使用新版依赖的库
+#     print("--- 场景2: 使用新版Python ---")
+#     modern_requirements = ["pip install 'numpy>=1.24' scikit-learn"]
+#     create_env(modern_requirements)
+#     print("-" * 20 + "\n")
+#
+#     # 示例3: 使用已缓存的环境
+#     print("--- 场景3: 再次安装旧版依赖，应直接命中缓存 ---")
+#     create_env(old_requirements)
+#     print("-" * 20 + "\n")
