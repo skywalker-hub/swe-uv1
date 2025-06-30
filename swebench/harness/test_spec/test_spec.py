@@ -120,3 +120,4 @@ def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
         language=MAP_REPO_TO_EXT[repo],
         env_key=env_key,
     )
+    #对比docker版，删去了5个字段
