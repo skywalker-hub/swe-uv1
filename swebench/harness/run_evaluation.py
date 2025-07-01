@@ -250,18 +250,27 @@ def get_dataset_from_preds(
     dataset = load_swebench_dataset(dataset_name, split)
     dataset_ids = {i[KEY_INSTANCE_ID] for i in dataset}
 
+    ### 若传入了 instance_ids，则检查这些 ID 是否都有对应的预测结果 ###
     if instance_ids:
+        # 计算 instance_ids 中哪些 ID 没有出现在 predictions 中（即没有预测结果）
         missing_preds = set(instance_ids) - set(predictions.keys())
         if missing_preds:
+            # 如果有缺失，打印警告信息
             print(f"Warning: Missing predictions for {len(missing_preds)} instance IDs.")
 
+    ### 检查 predictions 中是否包含不属于当前数据集的数据（非法预测 ID） ###
     prediction_ids = set(predictions.keys())
     if prediction_ids - dataset_ids:
+        # 如果有预测的 ID 不在当前数据集中，说明预测数据有问题，抛出异常
         raise ValueError(
             "Some prediction IDs not found in dataset!\n" + " ".join(prediction_ids - dataset_ids)
         )
+
+    ### 若传入了 instance_ids，则只保留这些 ID 对应的数据子集 ###
     if instance_ids:
+        # 对原始 dataset 进行过滤，只保留 instance_ids 中出现的部分
         dataset = [i for i in dataset if i[KEY_INSTANCE_ID] in instance_ids]
+
 
     if rewrite_reports:
         test_output_ids = set()
@@ -339,9 +348,11 @@ def main(
         if not report_dir.exists():
             report_dir.mkdir(parents=True)
 
+    ###
     predictions = get_predictions_from_file(predictions_path, dataset_name, split)
     predictions = {pred[KEY_INSTANCE_ID]: pred for pred in predictions}
 
+    ###
     dataset = get_dataset_from_preds(dataset_name, split, instance_ids, predictions, run_id, rewrite_reports)
     full_dataset = load_swebench_dataset(dataset_name, split, instance_ids)
 
@@ -350,6 +361,8 @@ def main(
 
     if not dataset:
         print("No instances to run.")
+
+    ###
     else:
         run_instances(
             predictions,
@@ -364,6 +377,7 @@ def main(
 
 
 if __name__ == "__main__":
+
     parser = ArgumentParser(
         description="Run evaluation harness for the given dataset and predictions.",
         formatter_class=ArgumentDefaultsHelpFormatter,
@@ -375,40 +389,50 @@ if __name__ == "__main__":
         type=str,
         help="Name of dataset or path to JSON file.",
     )
+
     parser.add_argument("--split", type=str, default="test", help="Split of the dataset")
+
     parser.add_argument(
         "--instance_ids",
         nargs="+",
         type=str,
         help="Instance IDs to run (space separated)",
     )
+
     parser.add_argument(
         "--predictions_path",
         type=str,
         help="Path to predictions file - if 'gold', uses gold predictions",
         required=True,
     )
+
     parser.add_argument(
         "--max_workers",
         type=int,
         default=4,
         help="Maximum number of workers (should be <= 75% of CPU cores)",
     )
+
     parser.add_argument("--open_file_limit", type=int, default=4096, help="Open file limit")
+
     parser.add_argument(
         "--timeout",
         type=int,
         default=1800,
         help="Timeout (in seconds) for running tests for each instance",
     )
+
     parser.add_argument("--run_id", type=str, required=True, help="Run ID - identifies the run")
+
     parser.add_argument(
         "--rewrite_reports",
         type=str2bool,
         default=False,
         help="Doesn't run new instances, only writes reports for instances with existing test outputs",
     )
+
     parser.add_argument("--report_dir", type=str, default=".", help="Directory to write reports to")
 
     args = parser.parse_args()
+
     main(**vars(args))

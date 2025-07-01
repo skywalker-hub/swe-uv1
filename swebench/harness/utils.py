@@ -37,10 +37,13 @@ class EvaluationError(Exception):
         )
 
 
-#####加载预测
+#######加载提交的答案
 def get_predictions_from_file(predictions_path: str, dataset_name: str, split: str):
+
+    ###加载标准答案
     if predictions_path == "gold":
         print("Using gold predictions - ignoring predictions_path")
+        #从swe-bench官方数据集加载
         dataset = load_swebench_dataset(dataset_name, split)
         return [
             {
@@ -50,6 +53,8 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
             }
             for datum in dataset
         ]
+    
+    ###加载私人答案
     if predictions_path.endswith(".json"):
         with open(predictions_path, "r") as f:
             predictions = json.load(f)
@@ -61,9 +66,12 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
                 raise ValueError(
                     "Predictions must be a list[prediction] or a dictionary[instance_id: prediction]"
                 )
+            
+    ###加载私人答案
     elif predictions_path.endswith(".jsonl"):
         with open(predictions_path, "r") as f:
             predictions = [json.loads(line) for line in f]
+
     else:
         raise ValueError("Predictions path must be .json or .jsonl")
 
@@ -76,7 +84,7 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
 
     return predictions
 
-
+######
 def run_threadpool(func, payloads, max_workers):
     if max_workers <= 0:
         return run_sequential(func, payloads)
@@ -122,7 +130,7 @@ def run_sequential(func, args_list):
     return succeeded, failed
 
 
-###新增魔塔数据源
+#######新增魔塔数据源
 from modelscope.msdatasets import MsDataset
 
 def load_swebench_dataset(
