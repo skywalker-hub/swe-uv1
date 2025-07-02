@@ -102,8 +102,8 @@ def make_test_spec(instance: SWEbenchInstance) -> TestSpec:
     else:
         arch = "x86_64"
 
-    # 通过对环境设置脚本列表进行哈希计算，生成一个唯一的环境密钥 (env_key)。
-    # 这个密钥是实现环境缓存、避免重复构建相同环境的关键。
+    ############### 通过对环境设置脚本列表进行哈希计算，生成一个唯一的环境密钥 (env_key)。
+    ### 这个密钥是实现环境缓存、避免重复构建相同环境的关键。
     hash_key = str(env_script_list)
     hash_object = hashlib.sha256()
     hash_object.update(hash_key.encode("utf-8"))

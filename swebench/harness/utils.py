@@ -362,6 +362,7 @@ def get_repo_file(repo, commit, filepath):
         return None
 
 
+######获得修改的文件路径
 def get_modified_files(patch: str) -> list[str]:
     """
     Get the list of modified files in a patch
