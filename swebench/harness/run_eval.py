@@ -5,7 +5,6 @@ import os
 import platform
 import subprocess
 import traceback
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
 
 if platform.system() == "Linux":
