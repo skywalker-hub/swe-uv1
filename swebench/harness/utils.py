@@ -207,6 +207,7 @@ def load_swebench_dataset(
 
 
 
+
 ### MARK - Patch Correction
 PATCH_PATTERN = re.compile(
     r"(?:diff[\w\_\.\ \/\-]+\n)?\-\-\-\s+a\/(?:.*?)\n\+\+\+\s+b\/(?:.*?)(?=diff\ |\-\-\-\ a\/|\Z)",
