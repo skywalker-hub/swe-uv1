@@ -902,8 +902,18 @@ SPECS_PYDICOM.update(
 
 SPECS_HUMANEVAL = {k: {"python": "3.9", "test_cmd": "python"} for k in ["1.0"]}
 
-SPECS_PPTX = {k: {"python": "3.10", "test_cmd": "python"} for k in ["1.0"]}
 
+SPECS_PPTX = {
+                k: {
+                    "python": "3.10",
+                    "packages": "requirements.txt",
+                    "install": "python -m pip install -e .",
+                    "test_cmd": "python"
+                }
+                for k in [
+                    "1.0",
+                ]
+}
 
 
 # Constants - Task Instance Instllation Environment
