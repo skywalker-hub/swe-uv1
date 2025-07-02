@@ -902,6 +902,10 @@ SPECS_PYDICOM.update(
 
 SPECS_HUMANEVAL = {k: {"python": "3.9", "test_cmd": "python"} for k in ["1.0"]}
 
+SPECS_PPTX = {k: {"python": "3.10", "test_cmd": "python"} for k in ["1.0"]}
+
+
+
 # Constants - Task Instance Instllation Environment
 MAP_REPO_VERSION_TO_SPECS_PY = {
     "astropy/astropy": SPECS_ASTROPY,
@@ -924,6 +928,7 @@ MAP_REPO_VERSION_TO_SPECS_PY = {
     "sqlfluff/sqlfluff": SPECS_SQLFLUFF,
     "swe-bench/humaneval": SPECS_HUMANEVAL,
     "sympy/sympy": SPECS_SYMPY,
+    "swesmith/scanny__python-pptx.278b47b1":SPECS_PPTX
 }
 
 # Constants - Repository Specific Installation Instructions
@@ -943,6 +948,7 @@ MAP_REPO_TO_REQS_PATHS = {
     "pyvista/pyvista": ["requirements_test.txt", "requirements.txt"],
     "sqlfluff/sqlfluff": ["requirements_dev.txt"],
     "sympy/sympy": ["requirements-dev.txt", "requirements-test.txt"],
+    "swesmith/scanny__python-pptx.278b47b1": ["requirements-docs.txt","requirements-dev.txt","requirements-test.txt", "requirements.txt"],
 }
 
 
