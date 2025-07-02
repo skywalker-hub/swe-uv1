@@ -84,6 +84,8 @@ def get_predictions_from_file(predictions_path: str, dataset_name: str, split: s
 
     return predictions
 
+
+
 ######
 def run_threadpool(func, payloads, max_workers):
     if max_workers <= 0:
@@ -111,6 +113,8 @@ def run_threadpool(func, payloads, max_workers):
     return succeeded, failed
 
 
+
+######
 def run_sequential(func, args_list):
     """
     Run a function with a list of arguments sequentially
@@ -128,6 +132,9 @@ def run_sequential(func, args_list):
         pbar.set_description(f"{len(succeeded)} ran successfully, {len(failed)} failed")
     pbar.close()
     return succeeded, failed
+
+
+
 
 
 #######新增魔塔数据源
@@ -194,6 +201,9 @@ def load_swebench_dataset(
         ]
 
     return [cast(SWEbenchInstance, instance) for instance in dataset]
+
+
+
 
 
 

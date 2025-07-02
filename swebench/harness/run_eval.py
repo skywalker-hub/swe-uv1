@@ -377,9 +377,9 @@ def main(
 
 if __name__ == "__main__":
     # 本地数据集路径（支持 .json 或 .jsonl）
-    dataset_name = "SWE-bench/SWE-bench_Lite"  # 修改为你的数据集文件路径
-    split = "test"  # 数据集划分，通常为 "test"
-    instance_ids= ["sympy__sympy-20590"]  # 如果需要指定实例ID列表，则填入列表，否则为 None
+    dataset_name = "SWE-bench/SWE-smith"  # 修改为你的数据集文件路径
+    split = "train"  # 数据集划分，通常为 "test"
+    instance_ids= ["swesmith/scanny__python-pptx.278b47b1"]  # 如果需要指定实例ID列表，则填入列表，否则为 None
     predictions_path = "gold"  # 修改为你的预测结果文件路径，或使用 "gold"
     max_workers = 1  # 并发工作数
     open_file_limit = 4096  # 打开文件数量限制
